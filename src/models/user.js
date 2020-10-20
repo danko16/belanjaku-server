@@ -6,10 +6,10 @@ module.exports = function (sequelize, DataTypes) {
         allowNull: false,
         primaryKey: true,
         type: DataTypes.UUID,
-        defaultValue: sequelize.UUIDV4,
+        defaultValue: DataTypes.UUIDV4,
       },
       full_name: {
-        allowNull: false,
+        allowNull: true,
         type: DataTypes.STRING,
       },
       birthday: {
@@ -37,7 +37,7 @@ module.exports = function (sequelize, DataTypes) {
         },
       },
       password: {
-        allowNull: false,
+        allowNull: true,
         type: DataTypes.STRING,
         validate: {
           is: /^(?=.*\d)(?=.*[a-zA-Z]).{8,}$/,

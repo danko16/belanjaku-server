@@ -20,47 +20,33 @@ const getToken = async (payload, expiresIn) => {
   }
 };
 
-const checkRegisterToken = async (token) => {
+const checkToken = async (token, tokenFor) => {
   try {
     const decrypted = AES.decrypt(token, config.aessecret).toString(enc.Utf8);
     const verify = await jwt.verify(decrypted, config.jwtsecret, function (err, decoded) {
-      if (err) return false;
-      else {
-        if (decoded.for === 'register') return true;
+      if (err) {
+        console.log(err);
+        return false;
+      } else {
+        if (decoded.for === tokenFor) return decoded;
         else return false;
       }
     });
 
     return verify;
   } catch (error) {
-    return false;
-  }
-};
-
-const checkResetToken = async (token) => {
-  try {
-    const decrypted = AES.decrypt(token, config.aessecret).toString(enc.Utf8);
-    const verify = await jwt.verify(decrypted, config.jwtsecret, function (err, decoded) {
-      if (err) return false;
-      else {
-        if (decoded.for === 'reset') return true;
-        else return false;
-      }
-    });
-
-    return verify;
-  } catch (error) {
+    console.log(error);
     return false;
   }
 };
 
 const getPayload = async (token) => {
   try {
-    const decrypted = AES.decrypt(token, config.aessecret).toString(enc.Utf8);
-    const verify = await jwt.verify(decrypted, config.jwtsecret, function (err, decoded) {
+    const verify = await jwt.verify(token, config.jwtsecret, function (err, decoded) {
       if (err) return false;
       else return decoded;
     });
+
     return verify;
   } catch (error) {
     return false;
@@ -70,7 +56,6 @@ const getPayload = async (token) => {
 module.exports = Object.freeze({
   encrypt,
   getToken,
+  checkToken,
   getPayload,
-  checkRegisterToken,
-  checkResetToken,
 });

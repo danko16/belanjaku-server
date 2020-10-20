@@ -24,6 +24,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(config.uploads));
 app.use('/documents', express.static(config.documents));
 
-app.use('/auth', limitedAccess, require('./routes/auth'));
+app.use('/user', limitedAccess, require('./routes/user'));
 
 module.exports = app;
