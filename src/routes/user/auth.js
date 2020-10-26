@@ -26,16 +26,16 @@ router.post('/register', [body('type', 'type must be present').exists()], async 
 
   try {
     const otp = generateOTP();
-    let registerToken;
+    let payload;
 
     if (type === 'email') {
       let user = await User.findOne({ where: { email } });
 
       if (user) {
-        return res.status(400).json(response(400, 'Email sudah terdaftar'));
+        return res.status(400).json(response(400, 'Email sudah terdaftar', null, 'user_exist'));
       }
 
-      const { pure, key } = await getToken({ email, otp, type: 'email', for: 'register' }, 60 * 30);
+      const { pure, key } = await getToken({ email, otp, type: 'email', for: 'confirm' }, 60 * 30);
 
       if (!key) {
         throw new Error('Failed to create token');
@@ -43,7 +43,7 @@ router.post('/register', [body('type', 'type must be present').exists()], async 
 
       const token = await getPayload(pure);
 
-      registerToken = { key, exp: token.exp };
+      payload = { confirm_token: { key, exp: token.exp }, email };
 
       sendActivationEmail({
         email,
@@ -54,10 +54,12 @@ router.post('/register', [body('type', 'type must be present').exists()], async 
       let user = await User.findOne({ where: { phone } });
 
       if (user) {
-        return res.status(400).json(response(400, 'Nomor telephone sudah terdaftar'));
+        return res
+          .status(400)
+          .json(response(400, 'Nomor telephone sudah terdaftar', null, 'user_exist'));
       }
 
-      const { pure, key } = await getToken({ phone, otp, type: 'phone', for: 'register' }, 60 * 30);
+      const { pure, key } = await getToken({ phone, otp, type: 'phone', for: 'confirm' }, 60 * 30);
 
       if (!key) {
         throw new Error('Failed to create token');
@@ -65,16 +67,15 @@ router.post('/register', [body('type', 'type must be present').exists()], async 
 
       const token = await getPayload(pure);
 
-      registerToken = { key, exp: token.exp };
+      payload = { confirm_token: { key, exp: token.exp }, phone };
+      /* Todo Send OTP to mobile */
     } else {
       return res.status(400).json(response(400, 'Type tidak di temukan'));
     }
 
-    return res.status(200).json(
-      response(200, 'Berhasil Mengirimkan Konfirmasi Registrasi', {
-        register_token: registerToken,
-      })
-    );
+    return res
+      .status(200)
+      .json(response(200, 'Berhasil Mengirimkan Konfirmasi Registrasi', payload));
   } catch (error) {
     return res.status(500).json(response(500, 'Internal Server Error!', error));
   }
@@ -98,7 +99,7 @@ router.get(
 
       const { email, type } = registerPayload;
 
-      const { pure, key } = await getToken({ email, type, for: 'register_complete' }, 60 * 30);
+      const { pure, key } = await getToken({ email, type, for: 'register' }, 60 * 30);
 
       if (!key) {
         throw new Error('Failed to create token');
@@ -108,7 +109,7 @@ router.get(
 
       return res.status(200).json(
         response(200, 'Konfirmasi Berhasil', {
-          register_complete_token: { key, exp: token.exp },
+          register_token: { key, exp: token.exp },
         })
       );
     } catch (error) {
@@ -123,9 +124,9 @@ router.post('/confirm-otp', [body('otp', 'otp must be present').exists()], async
     return res.status(422).json(response(422, errors.array()));
   }
 
-  let token = req.headers['x-register-token'];
+  let token = req.headers['x-confirm-token'];
   if (!token) {
-    return res.status(401).json(response(401, 'Register Token Is Required'));
+    return res.status(401).json(response(401, 'Confirm Token is Required'));
   }
 
   const { otp } = req.body;
@@ -134,34 +135,35 @@ router.post('/confirm-otp', [body('otp', 'otp must be present').exists()], async
     token = token.split(' ')[1];
     if (!token) return res.status(401).json(response(401, 'Invalid Token!'));
 
-    const registerPayload = await checkToken(token, 'register');
-    if (!registerPayload) return res.status(401).json(response(401, 'Invalid Token!'));
+    const confirmPayload = await checkToken(token, 'confirm');
+    if (!confirmPayload) return res.status(401).json(response(401, 'Invalid Token!'));
 
-    const { type, email, phone, otp: otpPayload } = registerPayload;
+    const { type, email, phone, otp: otpPayload } = confirmPayload;
 
     if (otp !== otpPayload) {
-      return res.status(400).json(response(400, 'Kode konfirmasi tidak cocok'));
+      return res
+        .status(400)
+        .json(response(400, 'Kode konfirmasi tidak cocok', null, 'unmatch_otp'));
     }
 
-    let registerCompleteToken;
+    let registerToken;
     if (type === 'email') {
-      const { pure, key } = await getToken({ email, type, for: 'register_complete' }, 60 * 30);
+      const { pure, key } = await getToken({ email, type, for: 'register' }, 60 * 30);
       const token = await getPayload(pure);
-      registerCompleteToken = { key, exp: token.exp };
+      registerToken = { key, exp: token.exp };
     } else if (type === 'phone') {
-      const { pure, key } = await getToken({ phone, type, for: 'register_complete' }, 60 * 30);
+      const { pure, key } = await getToken({ phone, type, for: 'register' }, 60 * 30);
       const token = await getPayload(pure);
-      registerCompleteToken = { key, exp: token.exp };
+      registerToken = { key, exp: token.exp };
     } else {
       return res.status(400).json(response(400, 'type tidak di temukan'));
     }
 
     return res
       .status(200)
-      .json(
-        response(200, 'Konfirmasi Berhasil', { register_complete_token: registerCompleteToken })
-      );
+      .json(response(200, 'Konfirmasi Berhasil', { register_token: registerToken }));
   } catch (error) {
+    console.log(error);
     return res.status(500).json(response(500, 'Internal Server Error', error));
   }
 });
@@ -172,7 +174,7 @@ router.post(
     body('full_name', 'full name must be present').exists(),
     body('password', 'password must be present')
       .exists()
-      .matches(/^(?=.*\d)(?=.*[a-zA-Z]).{8,}$/)
+      .matches(/^.{8,}$/)
       .withMessage('invalid password'),
   ],
   async (req, res) => {
@@ -181,7 +183,7 @@ router.post(
       return res.status(422).json(response(422, errors.array()));
     }
 
-    let token = req.headers['x-register-complete-token'];
+    let token = req.headers['x-register-token'];
     if (!token) return res.status(401).json(response(401, 'Register Token is Required'));
 
     const { full_name, password } = req.body;
@@ -190,31 +192,53 @@ router.post(
       token = token.split(' ')[1];
       if (!token) return res.status(401).json(response(401, 'Invalid Token'));
 
-      const registerPayload = await checkToken(token, 'register_complete');
+      const registerPayload = await checkToken(token, 'register');
       if (!registerPayload) return res.status(401).json(response(401, 'Invalid Token'));
 
       const { email, phone, type } = registerPayload;
 
+      let user;
       if (type === 'email') {
-        const user = await User.findOne({ where: { email } });
+        user = await User.findOne({ where: { email } });
 
         if (user) {
-          return res.status(400).json(response(400, 'Email sudah terdaftar'));
+          return res.status(400).json(response(400, 'Email sudah terdaftar', null, 'user_exist'));
         }
-        await User.create({ full_name, email, password: encrypt(password) });
+        user = await User.create({ full_name, email, password: encrypt(password) });
       } else if (type === 'phone') {
-        const user = await User.findOne({ where: { phone } });
+        user = await User.findOne({ where: { phone } });
 
         if (user) {
-          return res.status(400).json(response(400, 'Nomor telephone sudah terdaftar'));
+          return res
+            .status(400)
+            .json(response(400, 'Nomor telephone sudah terdaftar', null, 'user_exist'));
         }
 
-        await User.create({ full_name, phone, password: encrypt(password) });
+        user = await User.create({ full_name, phone, password: encrypt(password) });
       } else {
         return res.status(400).json(response(400, 'Type tidak di temukan'));
       }
 
-      return res.status(201).json(response(201, 'Registrasi Selesai'));
+      if (!user) {
+        throw new Error('Failed to create user');
+      }
+
+      const { pure, key } = await getToken({ uid: user.id, type: 'user', for: 'login' }, '1d');
+      const { exp } = await getPayload(pure);
+
+      return res.status(201).json(
+        response(201, 'Registrasi Selesai', {
+          token: { key, exp },
+          user: {
+            id: user.id,
+            full_name: user.full_name,
+            email: user.email,
+            phone: user.phone,
+            avatar: null,
+            type: 'user',
+          },
+        })
+      );
     } catch (error) {
       return res.status(500).json(response(500, 'Internal Server Error', error));
     }

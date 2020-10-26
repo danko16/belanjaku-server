@@ -40,7 +40,7 @@ module.exports = function (sequelize, DataTypes) {
         allowNull: true,
         type: DataTypes.STRING,
         validate: {
-          is: /^(?=.*\d)(?=.*[a-zA-Z]).{8,}$/,
+          is: /^.{8,}$/,
         },
       },
       login_attempt: {
