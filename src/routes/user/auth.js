@@ -1,5 +1,7 @@
 const express = require('express');
+const url = require('url');
 const { body, query, validationResult } = require('express-validator');
+const passport = require('./passport');
 const { users: User } = require('../../models');
 const config = require('../../../config');
 const {
@@ -92,9 +94,9 @@ router.get(
 
     const { tokenUrl } = req.query;
     try {
-      const registerPayload = await checkToken(tokenUrl.replace(/ /g, '+'), 'register');
+      const registerPayload = await checkToken(tokenUrl.replace(/ /g, '+'), 'confirm');
       if (!registerPayload) {
-        return res.status(400).json(response(400, 'Invalid token'));
+        return res.redirect(`${config.clientDomain}/register`);
       }
 
       const { email, type } = registerPayload;
@@ -107,9 +109,14 @@ router.get(
 
       const token = await getPayload(pure);
 
-      return res.status(200).json(
-        response(200, 'Konfirmasi Berhasil', {
-          register_token: { key, exp: token.exp },
+      return res.redirect(
+        url.format({
+          pathname: `${config.clientDomain}/register`,
+          query: {
+            key,
+            exp: token.exp,
+            email,
+          },
         })
       );
     } catch (error) {
@@ -241,6 +248,94 @@ router.post(
       );
     } catch (error) {
       return res.status(500).json(response(500, 'Internal Server Error', error));
+    }
+  }
+);
+
+router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
+
+router.get(
+  '/facebook/callback',
+  passport.authenticate('facebook', { failureRedirect: `${config.clientDomain}/` }),
+  async (req, res) => {
+    try {
+      const { user } = req;
+      const userExist = await User.findOne({ where: { email: user.email } });
+      if (userExist) {
+        return res.redirect(`${config.clientDomain}/`);
+      } else {
+        const { pure, key } = await getToken(
+          { email: user.email, type: 'email', for: 'register' },
+          60 * 30
+        );
+
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+
+        const token = await getPayload(pure);
+        return res.redirect(
+          url.format({
+            pathname: `${config.clientDomain}/register`,
+            query: {
+              key,
+              exp: token.exp,
+              email: user.email,
+            },
+          })
+        );
+      }
+    } catch (error) {
+      return res.redirect(`${config.clientDomain}/`);
+    }
+  }
+);
+
+router.get(
+  '/google',
+  passport.authenticate('google', {
+    scope: [
+      'https://www.googleapis.com/auth/plus.login',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ],
+  })
+);
+
+router.get(
+  '/google/callback',
+  passport.authenticate('google', { failureRedirect: `${config.clientDomain}/` }),
+  async function (req, res) {
+    try {
+      const { user } = req;
+      const userExist = await User.findOne({ where: { email: user.email } });
+
+      if (userExist) {
+        return res.redirect(`${config.clientDomain}/`);
+      } else {
+        const { pure, key } = await getToken(
+          { email: user.email, type: 'email', for: 'register' },
+          60 * 30
+        );
+
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+
+        const token = await getPayload(pure);
+
+        return res.redirect(
+          url.format({
+            pathname: `${config.clientDomain}/register`,
+            query: {
+              key,
+              exp: token.exp,
+              email: user.email,
+            },
+          })
+        );
+      }
+    } catch (error) {
+      return res.redirect(`${config.clientDomain}/`);
     }
   }
 );
