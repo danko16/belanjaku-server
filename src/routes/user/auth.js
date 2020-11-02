@@ -14,6 +14,85 @@ const { encrypt, getPayload } = require('../../utils/token');
 
 const router = express.Router();
 
+router.post(
+  '/login',
+  [
+    body('type', 'type must be present').exists(),
+    body('password', 'password must be present')
+      .exists()
+      .matches(/^(?=.*[a-zA-Z]).{8,}$/)
+      .withMessage('invalid password'),
+    body('remember_me', 'remember me must be present').exists(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json(response(422, errors.array()));
+    }
+
+    const { type, password, remember_me, email, phone } = req.body;
+
+    if (!email && !phone) {
+      return res.status(400).json(response(400, 'email atau nomor telephone harus ada'));
+    }
+
+    try {
+      let user;
+      if (type === 'email') {
+        user = await User.findOne({
+          where: { email },
+          attributes: { exclude: ['createdAt', 'updatedAt'] },
+        });
+        if (!user) {
+          return res.status(400).json(response(400, 'Email belum terdaftar'));
+        }
+
+        if (user.password !== encrypt(password)) {
+          return res.status(400).json(response(400, 'Password tidak cocok'));
+        }
+      } else if (type === 'phone') {
+        user = await User.findOne({
+          where: { phone },
+          attributes: { exclude: ['createdAt', 'updatedAt'] },
+        });
+        if (!user) {
+          return res.status(400).json(response(400, 'Email belum terdaftar'));
+        }
+
+        if (user.password !== encrypt(password)) {
+          return res.status(400).json(response(400, 'Password tidak cocok'));
+        }
+      } else {
+        return res.status(400).json(response(400, 'Type tidak di temukan'));
+      }
+      await user.update({ login_attempt: user.login_attempt + 1 });
+
+      const { key, pure } = await getToken(
+        { uid: user.id, type: 'user', for: 'login' },
+        remember_me ? '5d' : '2d'
+      );
+
+      const token = await getPayload(pure);
+
+      return res.status(200).json(
+        response(200, 'Berhasil masuk akun', {
+          token: { key, exp: token.exp },
+          user: {
+            id: user.id,
+            full_name: user.full_name,
+            email: user.email,
+            phone: user.phone,
+            avatar: null,
+            type: 'user',
+          },
+        })
+      );
+    } catch (error) {
+      return res.status(500).json(response(500, 'Internal Server Error!', error));
+    }
+  }
+);
+
 router.post('/register', [body('type', 'type must be present').exists()], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -34,7 +113,7 @@ router.post('/register', [body('type', 'type must be present').exists()], async 
       let user = await User.findOne({ where: { email } });
 
       if (user) {
-        return res.status(400).json(response(400, 'Email sudah terdaftar', null, 'user_exist'));
+        return res.status(400).json(response(400, 'Email sudah terdaftar'));
       }
 
       const { pure, key } = await getToken({ email, otp, type: 'email', for: 'confirm' }, 60 * 30);
@@ -56,9 +135,7 @@ router.post('/register', [body('type', 'type must be present').exists()], async 
       let user = await User.findOne({ where: { phone } });
 
       if (user) {
-        return res
-          .status(400)
-          .json(response(400, 'Nomor telephone sudah terdaftar', null, 'user_exist'));
+        return res.status(400).json(response(400, 'Nomor telephone sudah terdaftar'));
       }
 
       const { pure, key } = await getToken({ phone, otp, type: 'phone', for: 'confirm' }, 60 * 30);
@@ -148,9 +225,7 @@ router.post('/confirm-otp', [body('otp', 'otp must be present').exists()], async
     const { type, email, phone, otp: otpPayload } = confirmPayload;
 
     if (otp !== otpPayload) {
-      return res
-        .status(400)
-        .json(response(400, 'Kode konfirmasi tidak cocok', null, 'unmatch_otp'));
+      return res.status(400).json(response(400, 'Kode konfirmasi tidak cocok', null, 'show_error'));
     }
 
     let registerToken;
@@ -209,16 +284,14 @@ router.post(
         user = await User.findOne({ where: { email } });
 
         if (user) {
-          return res.status(400).json(response(400, 'Email sudah terdaftar', null, 'user_exist'));
+          return res.status(400).json(response(400, 'Email sudah terdaftar'));
         }
         user = await User.create({ full_name, email, password: encrypt(password) });
       } else if (type === 'phone') {
         user = await User.findOne({ where: { phone } });
 
         if (user) {
-          return res
-            .status(400)
-            .json(response(400, 'Nomor telephone sudah terdaftar', null, 'user_exist'));
+          return res.status(400).json(response(400, 'Nomor telephone sudah terdaftar'));
         }
 
         user = await User.create({ full_name, phone, password: encrypt(password) });
@@ -230,7 +303,9 @@ router.post(
         throw new Error('Failed to create user');
       }
 
-      const { pure, key } = await getToken({ uid: user.id, type: 'user', for: 'login' }, '1d');
+      await user.update({ login_attempt: user.login_attempt + 1 });
+
+      const { pure, key } = await getToken({ uid: user.id, type: 'user', for: 'login' }, '2d');
       const { exp } = await getPayload(pure);
 
       return res.status(201).json(
@@ -262,7 +337,30 @@ router.get(
       const { user } = req;
       const userExist = await User.findOne({ where: { email: user.email } });
       if (userExist) {
-        return res.redirect(`${config.clientDomain}/`);
+        const { pure, key } = await getToken(
+          { uid: userExist.id, type: 'user', for: 'login' },
+          '2d'
+        );
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+        const token = await getPayload(pure);
+
+        return res.redirect(
+          url.format({
+            pathname: `${config.clientDomain}/login`,
+            query: {
+              key,
+              exp: token.exp,
+              id: userExist.id,
+              full_name: userExist.full_name,
+              email: userExist.email,
+              phone: userExist.phone,
+              avatar: null,
+              type: 'user',
+            },
+          })
+        );
       } else {
         const { pure, key } = await getToken(
           { email: user.email, type: 'email', for: 'register' },
@@ -310,7 +408,30 @@ router.get(
       const userExist = await User.findOne({ where: { email: user.email } });
 
       if (userExist) {
-        return res.redirect(`${config.clientDomain}/`);
+        const { pure, key } = await getToken(
+          { uid: userExist.id, type: 'user', for: 'login' },
+          '2d'
+        );
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+        const token = await getPayload(pure);
+
+        return res.redirect(
+          url.format({
+            pathname: `${config.clientDomain}/login`,
+            query: {
+              key,
+              exp: token.exp,
+              id: userExist.id,
+              full_name: userExist.full_name,
+              email: userExist.email,
+              phone: userExist.phone,
+              avatar: null,
+              type: 'user',
+            },
+          })
+        );
       } else {
         const { pure, key } = await getToken(
           { email: user.email, type: 'email', for: 'register' },
