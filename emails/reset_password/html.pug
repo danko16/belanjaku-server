@@ -9,10 +9,11 @@ div(style='display: block; max-width: 580px; padding: 0 20px; margin: auto')
     .content
         p Hallo, Belanjers
         h3
-            strong Yuk Mulai Aktifasi Akun Belanjaku
+            strong Permintaan Reset Password
         p
-            | Sedikit lagi akunmu akan aktif. Cukup masukkan kode verifikasi di bawah untuk mengaktifkan
-            | akunmu.
+            | Seseorang telah meminta untuk mereset password akunmu. Silahkan masukan kode verifikasi di
+            | bawah untuk mereset password akunmu. bila kamu tidak merasa melakukan permintaan reset
+            | password silahkan abaikan email ini
         div(style='\
         border: 1px solid #d2d2d2;\
         padding: 12px;\
@@ -27,7 +28,7 @@ div(style='display: block; max-width: 580px; padding: 0 20px; margin: auto')
             span #{otp}
         p
             | Kode di atas hanya berlaku 30 menit. Mohon jangan sebarkan kode ini ke siapapun, termasuk
-            | pihak yang mengatasnamakan Belanjaku.id Kamu juga bisa aktivasi langsung dengan mengklik
+            | pihak yang mengatasnamakan Belanjaku.id Kamu juga bisa reset password langsung dengan mengklik
             | tombol di bawah.
         a(href=`${tokenUrl}` style='\
         display: block;\
@@ -42,25 +43,25 @@ div(style='display: block; max-width: 580px; padding: 0 20px; margin: auto')
         cursor: pointer;\
         text-decoration: none;\
         ' target='_blank')
-            | Aktifkan Sekarang
+            | Reset Password
         p
-            | Biar akunmu semakin aman, jangan lupa baca panduan keamanan kami 
-            a(href='http://localhost:3006' target='_blank' style='color: #4487ff; text-decoration: none') di sini.
+            | Biar akunmu semakin aman, jangan lupa baca panduan keamanan kami
+            a(href='http://localhost:3000' target='_blank' style='color: #4487ff; text-decoration: none') di sini.
         p(style='font-size: 14px')
-            | E-mail ini dibuat otomatis, mohon tidak membalas. Jika butuh bantuan, silakan 
-            a(href='http://localhost:3006' target='_blank' style='color: #4487ff; text-decoration: none')
+            | E-mail ini dibuat otomatis, mohon tidak membalas. Jika butuh bantuan, silakan
+            a(href='http://localhost:3000' target='_blank' style='color: #4487ff; text-decoration: none')
                 | hubungi Belanjaku Care.
     div
         div(style='font-family: sans-serif; text-align: center; padding: 10px 0; font-size: 20px')
             | Temukan Kami
         div(style='font-family: sans-serif; text-align: center; padding: 10px 0')
-            a(href='https://instagram.com/belanjaku_idn' target='_blank' style="width: 48px; height: 48px; display: inline-block")
+            a(style='width: 48px; height: 48px; display: inline-block' href='https://instagram.com/belanjaku_idn' target='_blank')
                 img(src='https://img.icons8.com/fluent/48/000000/instagram-new.png')
-            a(href='https://www.youtube.com/channel/UCZ5hOet9qMWGi-IzFV7msCQ' target='_blank' style="width: 48px; height: 48px; display: inline-block")
+            a(style='width: 48px; height: 48px; display: inline-block' href='https://www.youtube.com/channel/UCZ5hOet9qMWGi-IzFV7msCQ' target='_blank')
                 img(src='https://img.icons8.com/cotton/48/000000/youtube.png')
-            a(href='https://twitter.com/belanjaku_idn' target='_blank' style="width: 48px; height: 48px; display: inline-block")
+            a(style='width: 48px; height: 48px; display: inline-block' href='https://twitter.com/belanjaku_idn' target='_blank')
                 img(src='https://img.icons8.com/fluent/48/000000/twitter.png')
-            a(href='https://facebook.com/belanjaku.idn' target='_blank' style="width: 48px; height: 48px; display: inline-block")
+            a(style='width: 48px; height: 48px; display: inline-block' href='https://facebook.com/belanjaku.idn' target='_blank')
                 img(src='https://img.icons8.com/color/48/000000/facebook.png')
         div(style='\
         font-family: sans-serif;\

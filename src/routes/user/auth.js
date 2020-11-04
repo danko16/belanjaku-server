@@ -1,6 +1,6 @@
 const express = require('express');
 const url = require('url');
-const { body, query, validationResult } = require('express-validator');
+const { body, query, validationResult, oneOf } = require('express-validator');
 const passport = require('./passport');
 const { users: User } = require('../../models');
 const config = require('../../../config');
@@ -8,7 +8,7 @@ const {
   response,
   token: { checkToken, getToken },
   otp: { generateOTP },
-  emails: { sendActivationEmail },
+  emails: { sendActivationEmail, sendResetPasswordEmail },
 } = require('../../utils');
 const { encrypt, getPayload } = require('../../utils/token');
 
@@ -17,12 +17,15 @@ const router = express.Router();
 router.post(
   '/login',
   [
-    body('type', 'type must be present').exists(),
     body('password', 'password must be present')
       .exists()
       .matches(/^(?=.*[a-zA-Z]).{8,}$/)
       .withMessage('invalid password'),
     body('remember_me', 'remember me must be present').exists(),
+    oneOf(
+      [body('email').exists(), body('phone').exists()],
+      'email or phone number must be present'
+    ),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -30,15 +33,11 @@ router.post(
       return res.status(422).json(response(422, errors.array()));
     }
 
-    const { type, password, remember_me, email, phone } = req.body;
-
-    if (!email && !phone) {
-      return res.status(400).json(response(400, 'email atau nomor telephone harus ada'));
-    }
+    const { password, remember_me, email, phone } = req.body;
 
     try {
       let user;
-      if (type === 'email') {
+      if (email) {
         user = await User.findOne({
           where: { email },
           attributes: { exclude: ['createdAt', 'updatedAt'] },
@@ -50,7 +49,7 @@ router.post(
         if (user.password !== encrypt(password)) {
           return res.status(400).json(response(400, 'Password tidak cocok'));
         }
-      } else if (type === 'phone') {
+      } else if (phone) {
         user = await User.findOne({
           where: { phone },
           attributes: { exclude: ['createdAt', 'updatedAt'] },
@@ -63,7 +62,7 @@ router.post(
           return res.status(400).json(response(400, 'Password tidak cocok'));
         }
       } else {
-        return res.status(400).json(response(400, 'Type tidak di temukan'));
+        throw new Error('Failed to detect email or phone');
       }
       await user.update({ login_attempt: user.login_attempt + 1 });
 
@@ -93,72 +92,77 @@ router.post(
   }
 );
 
-router.post('/register', [body('type', 'type must be present').exists()], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(422).json(response(422, errors.array()));
-  }
-
-  const { email, phone, type } = req.body;
-
-  if (!email && !phone) {
-    return res.status(400).json(response(400, 'email atau nomor telephone harus ada'));
-  }
-
-  try {
-    const otp = generateOTP();
-    let payload;
-
-    if (type === 'email') {
-      let user = await User.findOne({ where: { email } });
-
-      if (user) {
-        return res.status(400).json(response(400, 'Email sudah terdaftar'));
-      }
-
-      const { pure, key } = await getToken({ email, otp, type: 'email', for: 'confirm' }, 60 * 30);
-
-      if (!key) {
-        throw new Error('Failed to create token');
-      }
-
-      const token = await getPayload(pure);
-
-      payload = { confirm_token: { key, exp: token.exp }, email };
-
-      sendActivationEmail({
-        email,
-        tokenUrl: `${config.serverDomain}/user/auth/confirm-token?tokenUrl=${key}`,
-        otp,
-      });
-    } else if (type === 'phone') {
-      let user = await User.findOne({ where: { phone } });
-
-      if (user) {
-        return res.status(400).json(response(400, 'Nomor telephone sudah terdaftar'));
-      }
-
-      const { pure, key } = await getToken({ phone, otp, type: 'phone', for: 'confirm' }, 60 * 30);
-
-      if (!key) {
-        throw new Error('Failed to create token');
-      }
-
-      const token = await getPayload(pure);
-
-      payload = { confirm_token: { key, exp: token.exp }, phone };
-      /* Todo Send OTP to mobile */
-    } else {
-      return res.status(400).json(response(400, 'Type tidak di temukan'));
+router.post(
+  '/register',
+  [
+    oneOf(
+      [body('email').exists(), body('phone').exists()],
+      'email or phone number must be present'
+    ),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json(response(422, errors.array()));
     }
 
-    return res
-      .status(200)
-      .json(response(200, 'Berhasil Mengirimkan Konfirmasi Registrasi', payload));
-  } catch (error) {
-    return res.status(500).json(response(500, 'Internal Server Error!', error));
+    const { email, phone } = req.body;
+
+    try {
+      const otp = generateOTP();
+      let payload;
+
+      if (email) {
+        let user = await User.findOne({ where: { email } });
+
+        if (user) {
+          return res.status(400).json(response(400, 'Email sudah terdaftar'));
+        }
+
+        const { pure, key } = await getToken({ email, otp, for: 'confirm_register' }, 60 * 30);
+
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+
+        const token = await getPayload(pure);
+
+        payload = { confirm_token: { key, exp: token.exp }, email };
+
+        sendActivationEmail({
+          email,
+          tokenUrl: `${config.serverDomain}/user/auth/confirm-token?tokenUrl=${key}`,
+          otp,
+        });
+      } else if (phone) {
+        let user = await User.findOne({ where: { phone } });
+
+        if (user) {
+          return res.status(400).json(response(400, 'Nomor telephone sudah terdaftar'));
+        }
+
+        const { pure, key } = await getToken({ phone, otp, for: 'confirm_register' }, 60 * 30);
+
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+
+        const token = await getPayload(pure);
+
+        payload = { confirm_token: { key, exp: token.exp }, phone };
+        /* Todo Send OTP to mobile */
+      } else {
+        throw new Error('Failed to detect email or phone');
+      }
+
+      return res
+        .status(200)
+        .json(response(200, 'Berhasil Mengirimkan Konfirmasi Registrasi', payload));
+    } catch (error) {
+      return res.status(500).json(response(500, 'Internal Server Error!', error));
+    }
   }
-});
+);
 
 router.get(
   '/confirm-token',
@@ -171,14 +175,14 @@ router.get(
 
     const { tokenUrl } = req.query;
     try {
-      const registerPayload = await checkToken(tokenUrl.replace(/ /g, '+'), 'confirm');
+      const registerPayload = await checkToken(tokenUrl.replace(/ /g, '+'), 'confirm_register');
       if (!registerPayload) {
         return res.redirect(`${config.clientDomain}/register`);
       }
 
-      const { email, type } = registerPayload;
+      const { email } = registerPayload;
 
-      const { pure, key } = await getToken({ email, type, for: 'register' }, 60 * 30);
+      const { pure, key } = await getToken({ email, for: 'register' }, 60 * 30);
 
       if (!key) {
         throw new Error('Failed to create token');
@@ -219,26 +223,26 @@ router.post('/confirm-otp', [body('otp', 'otp must be present').exists()], async
     token = token.split(' ')[1];
     if (!token) return res.status(401).json(response(401, 'Invalid Token!'));
 
-    const confirmPayload = await checkToken(token, 'confirm');
+    const confirmPayload = await checkToken(token, 'confirm_register');
     if (!confirmPayload) return res.status(401).json(response(401, 'Invalid Token!'));
 
-    const { type, email, phone, otp: otpPayload } = confirmPayload;
+    const { email, phone, otp: otpPayload } = confirmPayload;
 
     if (otp !== otpPayload) {
       return res.status(400).json(response(400, 'Kode konfirmasi tidak cocok', null, 'show_error'));
     }
 
     let registerToken;
-    if (type === 'email') {
-      const { pure, key } = await getToken({ email, type, for: 'register' }, 60 * 30);
+    if (email) {
+      const { pure, key } = await getToken({ email, for: 'register' }, 60 * 30);
       const token = await getPayload(pure);
       registerToken = { key, exp: token.exp };
-    } else if (type === 'phone') {
-      const { pure, key } = await getToken({ phone, type, for: 'register' }, 60 * 30);
+    } else if (phone) {
+      const { pure, key } = await getToken({ phone, for: 'register' }, 60 * 30);
       const token = await getPayload(pure);
       registerToken = { key, exp: token.exp };
     } else {
-      return res.status(400).json(response(400, 'type tidak di temukan'));
+      throw new Error('Failed to detect email or phone');
     }
 
     return res
@@ -277,17 +281,17 @@ router.post(
       const registerPayload = await checkToken(token, 'register');
       if (!registerPayload) return res.status(401).json(response(401, 'Invalid Token'));
 
-      const { email, phone, type } = registerPayload;
+      const { email, phone } = registerPayload;
 
       let user;
-      if (type === 'email') {
+      if (email) {
         user = await User.findOne({ where: { email } });
 
         if (user) {
           return res.status(400).json(response(400, 'Email sudah terdaftar'));
         }
         user = await User.create({ full_name, email, password: encrypt(password) });
-      } else if (type === 'phone') {
+      } else if (phone) {
         user = await User.findOne({ where: { phone } });
 
         if (user) {
@@ -296,7 +300,7 @@ router.post(
 
         user = await User.create({ full_name, phone, password: encrypt(password) });
       } else {
-        return res.status(400).json(response(400, 'Type tidak di temukan'));
+        throw new Error('Failed to detect email or phone');
       }
 
       if (!user) {
@@ -362,10 +366,7 @@ router.get(
           })
         );
       } else {
-        const { pure, key } = await getToken(
-          { email: user.email, type: 'email', for: 'register' },
-          60 * 30
-        );
+        const { pure, key } = await getToken({ email: user.email, for: 'register' }, 60 * 30);
 
         if (!key) {
           throw new Error('Failed to create token');
@@ -433,10 +434,7 @@ router.get(
           })
         );
       } else {
-        const { pure, key } = await getToken(
-          { email: user.email, type: 'email', for: 'register' },
-          60 * 30
-        );
+        const { pure, key } = await getToken({ email: user.email, for: 'register' }, 60 * 30);
 
         if (!key) {
           throw new Error('Failed to create token');
@@ -457,6 +455,219 @@ router.get(
       }
     } catch (error) {
       return res.redirect(`${config.clientDomain}/`);
+    }
+  }
+);
+
+router.post(
+  '/forgot-password',
+  [
+    oneOf(
+      [body('email').exists(), body('phone').exists()],
+      'email or phone number must be present'
+    ),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json(response(422, errors.array()));
+    }
+
+    const { email, phone } = req.body;
+
+    try {
+      const otp = generateOTP();
+      let payload;
+      if (email) {
+        const user = await User.findOne({ where: { email } });
+        if (!user) {
+          return res.status(400).json(response(400, 'Email belum terdaftar'));
+        }
+
+        console.log(email);
+
+        const { key, pure } = await getToken({ email, otp, for: 'confirm_reset' }, 60 * 30);
+
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+
+        const token = await getPayload(pure);
+
+        payload = { confirm_token: { key, exp: token.exp }, email };
+        sendResetPasswordEmail({
+          email,
+          tokenUrl: `${config.serverDomain}/user/auth/forgot-password/confirm-token?tokenUrl=${key}`,
+          otp,
+        });
+      } else if (phone) {
+        const user = await User.findOne({ where: { phone } });
+
+        if (!user) {
+          return res.status(400).json(response(400, 'Nomor Telephone belum terdaftar'));
+        }
+
+        const { key, pure } = await getToken({ email, otp, for: 'confirm_reset' }, 60 * 30);
+
+        if (!key) {
+          throw new Error('Failed to create token');
+        }
+
+        const token = await getPayload(pure);
+
+        payload = { confirm_token: { key, exp: token.exp }, email };
+
+        /* Todo Send OTP to mobile */
+      } else {
+        throw new Error('Failed to detect email or phone');
+      }
+
+      return res
+        .status(200)
+        .json(response(200, 'Berhasil mengirimkan konfirmasi lupa password', payload));
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json(response(500, 'Internal Server Error!', error));
+    }
+  }
+);
+
+router.get(
+  '/forgot-password/confirm-token',
+  [query('tokenUrl', 'token url must be present').exists()],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json(response(422, errors.array()));
+    }
+
+    const { tokenUrl } = req.query;
+
+    try {
+      const resetPayload = await checkToken(tokenUrl.replace(/ /g, '+'), 'confirm_reset');
+      if (!resetPayload) {
+        return res.redirect(`${config.clientDomain}/reset-password`);
+      }
+
+      const { email } = resetPayload;
+
+      const { pure, key } = await getToken({ email, for: 'reset_password' }, 60 * 30);
+
+      if (!key) {
+        throw new Error('Failed to create token');
+      }
+
+      const token = await getPayload(pure);
+
+      return res.redirect(
+        url.format({
+          pathname: `${config.clientDomain}/reset-password`,
+          query: {
+            key,
+            exp: token.exp,
+            email,
+          },
+        })
+      );
+    } catch (error) {
+      return res.status(500).json(response(500, 'Internal Server Error!', error));
+    }
+  }
+);
+
+router.post(
+  '/forgot-password/confirm-otp',
+  [body('otp', 'otp must be present').exists()],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json(response(422, errors.array()));
+    }
+
+    let token = req.headers['x-confirm-token'];
+    if (!token) {
+      return res.status(401).json(response(401, 'Confirm Token is Required'));
+    }
+
+    const { otp } = req.body;
+
+    try {
+      token = token.split(' ')[1];
+      if (!token) return res.status(401).json(response(401, 'Invalid Token!'));
+
+      const confirmPayload = await checkToken(token, 'confirm_reset');
+      if (!confirmPayload) return res.status(401).json(response(401, 'Invalid Token!'));
+
+      const { email, phone, otp: otpPayload } = confirmPayload;
+
+      if (otp !== otpPayload) {
+        return res
+          .status(400)
+          .json(response(400, 'Kode konfirmasi tidak cocok', null, 'show_error'));
+      }
+
+      let resetToken;
+      if (email) {
+        const { pure, key } = await getToken({ email, for: 'reset_password' }, 60 * 30);
+        const token = await getPayload(pure);
+        resetToken = { key, exp: token.exp };
+      } else if (phone) {
+        const { pure, key } = await getToken({ phone, for: 'reset_password' }, 60 * 30);
+        const token = await getPayload(pure);
+        resetToken = { key, exp: token.exp };
+      } else {
+        throw new Error('Failed to detect email or phone');
+      }
+
+      return res
+        .status(200)
+        .json(response(200, 'Konfirmasi Berhasil', { reset_password_token: resetToken }));
+    } catch (error) {
+      console.log(error);
+      return res.status(500).json(response(500, 'Internal Server Error', error));
+    }
+  }
+);
+
+router.post(
+  '/reset-password',
+  [body('password', 'password must be present').exists()],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(422).json(response(422, errors.array()));
+    }
+
+    let token = req.headers['x-reset-token'];
+    if (!token) {
+      return res.status(401).json(response(401, 'Reset token is required'));
+    }
+    const { password } = req.body;
+    try {
+      token = token.split(' ')[1];
+      if (!token) return res.status(400).json(response(400, 'Invalid Token'));
+
+      const resetPayload = await checkToken(token, 'reset_password');
+
+      if (!resetPayload) return res.status(401).json(response(401, 'Invalid Token!'));
+
+      const { email, phone } = resetPayload;
+
+      if (email) {
+        const user = await User.findOne({ where: { email } });
+        if (!user) return res.status(400).json(response(400, 'Email belum terdaftar'));
+        user.update({ password: encrypt(password) });
+      } else if (phone) {
+        const user = await User.findOne({ where: { phone } });
+        if (!user) return res.status(400).json(response(400, 'Nomor Telephone belum terdaftar'));
+        user.update({ password: encrypt(password) });
+      } else {
+        throw new Error('Failed to detect email or phone');
+      }
+
+      return res.status(200).json(response(200, 'berhasil reset password'));
+    } catch (error) {
+      return res.status(500).json(response(500, 'Internal Server Error!', error));
     }
   }
 );

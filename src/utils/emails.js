@@ -20,7 +20,7 @@ const sendActivationEmail = (data) => {
       },
       locals: {
         subject: 'Silahkan Aktifasi Emailmu',
-        ctaLink: data.tokenUrl,
+        tokenUrl: data.tokenUrl,
         otp: data.otp,
       },
     })
@@ -32,4 +32,25 @@ const sendActivationEmail = (data) => {
     });
 };
 
-module.exports = { sendActivationEmail };
+const sendResetPasswordEmail = (data) => {
+  emailSender
+    .send({
+      template: 'reset_password',
+      message: {
+        to: data.email,
+      },
+      locals: {
+        subject: 'Permintaan Reset Password',
+        tokenUrl: data.tokenUrl,
+        otp: data.otp,
+      },
+    })
+    .then((res) => {
+      return true;
+    })
+    .catch((err) => {
+      return false;
+    });
+};
+
+module.exports = { sendActivationEmail, sendResetPasswordEmail };
