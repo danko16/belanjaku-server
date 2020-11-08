@@ -25,7 +25,6 @@ const checkToken = async (token, tokenFor) => {
     const decrypted = AES.decrypt(token, config.aessecret).toString(enc.Utf8);
     const verify = await jwt.verify(decrypted, config.jwtsecret, function (err, decoded) {
       if (err) {
-        console.log(err);
         return false;
       } else {
         if (decoded.for === tokenFor) return decoded;
@@ -35,7 +34,6 @@ const checkToken = async (token, tokenFor) => {
 
     return verify;
   } catch (error) {
-    console.log(error);
     return false;
   }
 };

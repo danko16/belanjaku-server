@@ -7,6 +7,6 @@ function generateOTP() {
   return OTP;
 }
 
-module.exports = {
+module.exports = Object.freeze({
   generateOTP,
-};
+});

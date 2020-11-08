@@ -6,6 +6,7 @@ const { users: User } = require('../../models');
 const config = require('../../../config');
 const {
   response,
+  auth: { isAllow },
   token: { checkToken, getToken },
   otp: { generateOTP },
   emails: { sendActivationEmail, sendResetPasswordEmail },
@@ -13,6 +14,14 @@ const {
 const { encrypt, getPayload } = require('../../utils/token');
 
 const router = express.Router();
+
+router.post('/is-allow', isAllow, (req, res) => {
+  try {
+    return res.status(200).json(response(200, 'Allowed!'));
+  } catch (error) {
+    return res.status(500).json(response(500, 'Internal Server Error!'));
+  }
+});
 
 router.post(
   '/login',
@@ -249,7 +258,6 @@ router.post('/confirm-otp', [body('otp', 'otp must be present').exists()], async
       .status(200)
       .json(response(200, 'Konfirmasi Berhasil', { register_token: registerToken }));
   } catch (error) {
-    console.log(error);
     return res.status(500).json(response(500, 'Internal Server Error', error));
   }
 });
@@ -484,8 +492,6 @@ router.post(
           return res.status(400).json(response(400, 'Email belum terdaftar'));
         }
 
-        console.log(email);
-
         const { key, pure } = await getToken({ email, otp, for: 'confirm_reset' }, 60 * 30);
 
         if (!key) {
@@ -526,7 +532,6 @@ router.post(
         .status(200)
         .json(response(200, 'Berhasil mengirimkan konfirmasi lupa password', payload));
     } catch (error) {
-      console.log(error);
       return res.status(500).json(response(500, 'Internal Server Error!', error));
     }
   }
@@ -621,9 +626,8 @@ router.post(
 
       return res
         .status(200)
-        .json(response(200, 'Konfirmasi Berhasil', { reset_password_token: resetToken }));
+        .json(response(200, 'Konfirmasi Berhasil', { reset_token: resetToken }));
     } catch (error) {
-      console.log(error);
       return res.status(500).json(response(500, 'Internal Server Error', error));
     }
   }

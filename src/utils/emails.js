@@ -53,4 +53,4 @@ const sendResetPasswordEmail = (data) => {
     });
 };
 
-module.exports = { sendActivationEmail, sendResetPasswordEmail };
+module.exports = Object.freeze({ sendActivationEmail, sendResetPasswordEmail });
