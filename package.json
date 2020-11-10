@@ -27,6 +27,7 @@
     "pug": "^3.0.0",
     "sequelize": "^6.3.5",
     "socket.io": "^3.0.1",
+    "ua-parser-js": "^0.7.22",
     "winston": "^3.3.3"
   },
   "devDependencies": {

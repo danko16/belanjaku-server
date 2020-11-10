@@ -57,5 +57,12 @@ module.exports = function (sequelize, DataTypes) {
     { timestamps: true, underscored: true }
   );
 
+  Users.associate = function (models) {
+    Users.hasMany(models.login_activities, {
+      foreignKey: 'user_id',
+      onDelete: 'CASCADE',
+    });
+  };
+
   return Users;
 };
