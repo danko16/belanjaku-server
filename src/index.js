@@ -1,6 +1,7 @@
 const { createLogger, format, transports } = require('winston');
 const config = require('../config');
 const app = require('./app');
+const io = require('./io');
 const { sequelize } = require('./models');
 const server = require('http').createServer(app);
 
@@ -14,6 +15,11 @@ process.on('unhandledRejection', (reason, p) => {
 });
 
 sequelize.sync({}).then(() => {
+  io.attach(server, {
+    pingInterval: 10000,
+    pingTimeout: 5000,
+    cookie: false,
+  });
   server.on('listening', () => {
     logger.info('server started on %s:%d', config.host, config.port);
   });

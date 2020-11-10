@@ -358,6 +358,8 @@ router.get(
         }
         const token = await getPayload(pure);
 
+        await userExist.update({ login_attempt: userExist.login_attempt + 1 });
+
         return res.redirect(
           url.format({
             pathname: `${config.clientDomain}/login`,
@@ -425,6 +427,8 @@ router.get(
           throw new Error('Failed to create token');
         }
         const token = await getPayload(pure);
+
+        await userExist.update({ login_attempt: userExist.login_attempt + 1 });
 
         return res.redirect(
           url.format({
