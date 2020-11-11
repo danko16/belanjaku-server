@@ -1,9 +1,9 @@
 {
-  "name": "belanjaku",
+  "name": "belanjaku-server",
   "version": "1.0.0",
-  "description": "",
   "author": "https://github.com/danko16",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "start": "node src/",
     "dev": "node_modules/.bin/nodemon --exec node src/",
@@ -51,6 +51,5 @@
       "eslint --fix"
     ]
   },
-  "keywords": [],
-  "license": "ISC"
+  "keywords": []
 }
